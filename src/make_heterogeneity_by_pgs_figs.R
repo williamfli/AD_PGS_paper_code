@@ -7,6 +7,7 @@ library(xgboost)
 library(Rtsne)
 library(ComplexHeatmap)
 library(circlize)
+library(SHAPforxgboost)
 set.seed(123)
 
 
@@ -19,15 +20,12 @@ kendall_correlation <- function(x, y) {
 compare_xgboost_models <- function(full_input, pgs_variables, selected_phenotype_variables, mapper_pgs, mapper_pheno, plot_directory) {
     covariates <- c("PC1_AVG","PC2_AVG","PC3_AVG","PC4_AVG","PC5_AVG","PC6_AVG","PC7_AVG","PC8_AVG","PC9_AVG","PC10_AVG",
                     "msex","age_death","age_bl","kronos")
-
-
     # Define scheme names for performance metrics:
     # Scheme 1: PCs (using PC1 through PC8 together)
     # Scheme 2: One PGS variable at a time (using columns in pgs_variables)
     # Scheme 3: PCs independently (each of PC1, PC2, …, PC8)
     # Scheme 4: All PGSs together (using the full set of pgs_variables)
     # Scheme 5: Only covariates
-
     scheme_names <- c("PCs", paste0("PC", 1:8), sapply(pgs_variables, mapper_pgs), "all_PGSs", "covariates")
     models <- data.frame(matrix(NA, nrow = length(selected_phenotype_variables), ncol = length(scheme_names)),
                          stringsAsFactors = FALSE)
@@ -66,9 +64,11 @@ compare_xgboost_models <- function(full_input, pgs_variables, selected_phenotype
     
     # Loop over each phenotype
     for (pheno in selected_phenotype_variables) {
+
         # Extract response variables from imputed train and test data
         y_train <- train_data[[pheno]]
         y_test  <- test_data[[pheno]]
+        
         
         # ----- Scheme 1: Use PC1 through PC8 together plus covariates -----
         X_train <- cbind(pc_train, as.matrix(train_data[, covariates]))
@@ -79,6 +79,17 @@ compare_xgboost_models <- function(full_input, pgs_variables, selected_phenotype
         preds   <- predict(model, newdata = X_test)
         r_value <- cor(preds, y_test)
         models[pheno, "PCs"] <- r_value
+        # Save Shapley values for Scheme 1 (PCs model)
+        shap_values <- shap.values(xgb_model = model, X_train = X_train)
+        shap_df <- as.data.frame(shap_values$shap_score)
+        colnames(shap_df) <- c(paste0("PC", 1:8), covariates)
+        shap_means <- data.frame(t(colMeans(abs(shap_df[, paste0("PC", 1:8)]))))
+        colnames(shap_means) <- paste0("PC", 1:8)
+        write.table(shap_means,
+            file = file.path(plot_directory, paste0("shapley_scores_PCs_", pheno, ".tsv")),
+            sep = "\t",
+            row.names = FALSE,
+            quote = FALSE)
         
         # ----- Scheme 2: Train xgboost on one PGS at a time plus covariates -----
         for (pg in pgs_variables) {
@@ -98,7 +109,6 @@ compare_xgboost_models <- function(full_input, pgs_variables, selected_phenotype
             X_train_pc <- as.matrix(cbind(pc_train[, pc_index, drop = FALSE], train_data[, covariates]))
             dtrain_pc  <- xgb.DMatrix(data = X_train_pc, label = y_train)
             model_pc   <- xgb.train(params = params, data = dtrain_pc, nrounds = 200)
-            
             X_test_pc  <- as.matrix(cbind(pc_test[, pc_index, drop = FALSE], test_data[, covariates]))
             preds_pc   <- predict(model_pc, newdata = X_test_pc)
             r_value_pc <- cor(preds_pc, y_test)
@@ -114,7 +124,17 @@ compare_xgboost_models <- function(full_input, pgs_variables, selected_phenotype
         preds_all   <- predict(model_all, newdata = X_test_all)
         r_value_all <- cor(preds_all, y_test)
         models[pheno, "all_PGSs"] <- r_value_all
-    
+        # Save Shapley values for Scheme 4 (all PGSs model)
+        shap_values_all <- shap.values(xgb_model = model_all, X_train = X_train_all)
+        shap_df_all <- as.data.frame(shap_values_all$shap_score)
+        colnames(shap_df_all) <- c(pgs_variables, covariates)
+        shap_means_all <- data.frame(t(colMeans(abs(shap_df_all[, pgs_variables]))))
+        colnames(shap_means_all) <- pgs_variables
+        write.table(shap_means_all,
+            file = file.path(plot_directory, paste0("shapley_scores_all_PGSs_", pheno, ".tsv")),
+            sep = "\t",
+            row.names = FALSE,
+            quote = FALSE)
         # ----- Scheme 5: Train xgboost using only the covariates -----
         X_train_cov <- as.matrix(train_data[, covariates])
         dtrain_cov  <- xgb.DMatrix(data = X_train_cov, label = y_train)
@@ -123,8 +143,6 @@ compare_xgboost_models <- function(full_input, pgs_variables, selected_phenotype
         preds_cov   <- predict(model_cov, newdata = X_test_cov)
         r_value_cov <- cor(preds_cov, y_test)
         models[pheno, "covariates"] <- r_value_cov
-
-
         # ----- Scheme 6: Train xgboost using covariates + apoe_genotype -----
         covariates_apoe <- c(covariates, "apoe_genotype")
         X_train_apoe <- as.matrix(train_data[, covariates_apoe])
@@ -135,7 +153,75 @@ compare_xgboost_models <- function(full_input, pgs_variables, selected_phenotype
         r_value_apoe <- cor(preds_apoe, y_test)
         models[pheno, "covariates_and_APOE"] <- r_value_apoe
     }
+
+    # Create heatmap of mean Shapley contributions for all_PGSs model
+    # Read in all Shapley score files and compute means
+    shapley_means <- matrix(NA, nrow = length(selected_phenotype_variables), ncol = length(pgs_variables))
+    rownames(shapley_means) <- selected_phenotype_variables
+    colnames(shapley_means) <- pgs_variables
+    for (pheno in selected_phenotype_variables) {
+        shap_file <- file.path(plot_directory, paste0("shapley_scores_all_PGSs_", pheno, ".tsv"))
+        if (file.exists(shap_file)) {
+            shap_data <- read.delim(shap_file, header = TRUE, sep = "\t")
+            pgs_shap <- shap_data[, pgs_variables, drop = FALSE]
+            shapley_means[pheno, ] <- as.numeric(pgs_shap)
+        }
+    }
+    # Normalize so that each row sums to 1
+    shapley_means <- shapley_means / rowSums(shapley_means, na.rm = TRUE)
+    rownames(shapley_means) <- sapply(rownames(shapley_means), mapper_pheno)
+    colnames(shapley_means) <- sapply(colnames(shapley_means), mapper_pgs)
+    ht_shapley <- Heatmap(
+        shapley_means,
+        name = "Normalized Mean |SHAP|",
+        col = colorRamp2(c(0, max(shapley_means, na.rm = TRUE)), c("white", "darkred")),
+        row_names_side = "left",
+        column_names_side = "bottom",
+        column_names_rot = 90,
+        column_title = "PGS Variables",
+        row_title = "Phenotypes",
+        heatmap_legend_param = list(title = "Normalized Mean |SHAP|"),
+        cluster_rows = TRUE,
+        cluster_columns = TRUE,
+        row_names_max_width = unit(8, "cm")
+    )
     
+    pdf(file.path(plot_directory, "shapley_mean_contributions_heatmap.pdf"), width = 12, height = 10)
+    draw(ht_shapley)
+    dev.off()
+    
+    # Create heatmap of mean Shapley contributions for PCs model
+        shapley_means_pcs <- matrix(NA, nrow = length(selected_phenotype_variables), ncol = 8)
+        rownames(shapley_means_pcs) <- selected_phenotype_variables
+        colnames(shapley_means_pcs) <- paste0("PC", 1:8)
+        for (pheno in selected_phenotype_variables) {
+            shap_file <- file.path(plot_directory, paste0("shapley_scores_PCs_", pheno, ".tsv"))
+            if (file.exists(shap_file)) {
+                shap_data <- read.delim(shap_file, header = TRUE, sep = "\t")
+                pcs_shap <- shap_data[, paste0("PC", 1:8), drop = FALSE]
+                shapley_means_pcs[pheno, ] <- as.numeric(pcs_shap)
+            }
+        }
+        # Normalize so that each row sums to 1
+        shapley_means_pcs <- shapley_means_pcs / rowSums(shapley_means_pcs, na.rm = TRUE)
+        rownames(shapley_means_pcs) <- sapply(rownames(shapley_means_pcs), mapper_pheno)
+        ht_shapley_pcs <- Heatmap(
+            shapley_means_pcs,
+            name = "Normalized Mean |SHAP|",
+            col = colorRamp2(c(0, max(shapley_means_pcs, na.rm = TRUE)), c("white", "darkorange")),
+            row_names_side = "left",
+            column_names_side = "bottom",
+            column_names_rot = 90,
+            column_title = "PGS Principal Components",
+            row_title = "Phenotypes",
+            heatmap_legend_param = list(title = "Normalized Mean |SHAP|"),
+            cluster_rows = TRUE,
+            cluster_columns = TRUE,
+            row_names_max_width = unit(8, "cm")
+        )
+        pdf(file.path(plot_directory, "shapley_mean_contributions_PCs_heatmap.pdf"), width = 12, height = 10)
+        draw(ht_shapley_pcs)
+        dev.off()
     rownames(models) <- sapply(rownames(models), mapper_pheno)
     write.table(models,
                 file = file.path(plot_directory, "models.tsv"),
@@ -147,7 +233,6 @@ compare_xgboost_models <- function(full_input, pgs_variables, selected_phenotype
         test_idx = test_idx,
         pca_model = pca_result
     ))
-
 }
 
 plot_heterogeneity_pca <- function(full_input, pgs_vars, selected_pheno_vars, 
