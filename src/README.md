@@ -6,3 +6,6 @@ make_one_pgs_by_all.R shows the effect sizes of specific cross-trait association
 
 make_pgs_fig.R shows the underlying loci contributions to PGS models, corresponding to the right side of figure 3 of the manuscript.
 
+rGreat_analysis.R performs the GREAT enrichment analysis for selected PGS models, corresponding to figure 4 of the manuscript.
+
+make_heterogeneity_by_pgs_figs.R performs the analyses for characterizing individual-level heterogeneity, corresponding to figure 5 of the manuscript.
