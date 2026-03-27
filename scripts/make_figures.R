@@ -12,7 +12,6 @@ source(glue("{final_assoc_directory}make_main_assoc_figs.R"))
 source(glue("{final_assoc_directory}make_pgs_fig.R"))
 source(glue("{final_assoc_directory}rGreat_analysis.R"))
 source(glue("{final_assoc_directory}transferability_analysis.R"))
-source(glue("{final_assoc_directory}make_one_phenotype_by_all.R"))
 source(glue("{final_assoc_directory}make_heterogeneity_by_pgs_figs.R"))
 
 phenotype_annotations <- read.delim(glue("{final_assoc_directory}metadata_sample_attributes.tsv"), 
