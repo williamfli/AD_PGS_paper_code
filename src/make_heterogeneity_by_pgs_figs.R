@@ -279,6 +279,14 @@ plot_heterogeneity_pca <- function(full_input, pgs_vars, selected_pheno_vars,
     # Take absolute value of loadings
     # Use ComplexHeatmap default clustering
     mat <- abs(mat)
+    # Reorder columns numerically while keeping clustering
+    col_order <- order(as.numeric(gsub("PC", "", colnames(mat))))
+    mat <- mat[, col_order]
+    
+    # Reorder rows to bring largest values closer to the diagonal
+    row_order <- order(apply(mat, 1, function(row) which.max(row)))
+    mat <- mat[row_order, ]
+    colnames(mat) <- gsub("^PC", "", colnames(mat))
     ht <- Heatmap(
         mat,
         name = "Loading",
@@ -293,10 +301,10 @@ plot_heterogeneity_pca <- function(full_input, pgs_vars, selected_pheno_vars,
         row_title = "PGS",
         heatmap_legend_param = list(title = "Loading"),
         row_dend_side = "right", # Show row dendrogram on the right
-        cluster_rows = readRDS(file.path(plot_dir, "pgs_effects_heatmap_stage_2_col_dend.rds")),
+        cluster_rows = hclust(dist(mat), method = "ward.D2"),
         cluster_columns = hclust(dist(t(mat)), method = "ward.D2")
     )
-    pdf(file.path(plot_dir, "pgs_loadings_heatmap_predend.pdf"), width = 8, height = 4)
+    pdf(file.path(plot_dir, "pgs_loadings_heatmap_reordered.pdf"), width = 8, height = 4)
     draw(ht)
     dev.off()
     loadings$var <- rownames(loadings)
@@ -637,8 +645,11 @@ p_cluster_apoe <- ggplot(cluster_apoe_df, aes(x = Cluster, y = Count, fill = fac
         title = "Cluster Assignments by ApoE Genotype"
     ) +
     theme_bw(base_size = 32) +
-    scale_fill_brewer(type = "qual", palette = "Set2", 
-                      labels = c("e2e2", "e2e3", "e2e4", "e3e3", "e3e4", "e4e4"))
+    scale_fill_manual(
+        values = colorRampPalette(c("blue", "red"))(6),
+        labels = c("e2e2", "e2e3", "e2e4", "e3e3", "e3e4", "e4e4"),
+        name = "ApoE Genotype"
+    )
 
 ggsave(
     filename = file.path(plot_dir, "cluster_apoe_concordance_stacked.pdf"),
