@@ -15,7 +15,8 @@ The remaining tables, and all of the figure panels, can be reproduced through th
 
 
 ## Documentation for file paths
-
+| File path| Description |
+|---|---|
 | `output_dir` | where results are written |
 | `cohort_table` | individual-level prioritized PGS, AD phenotypes, covariates, and APOE allelotype |
 | `all_pgs_scores` | individual-level PGS (all 713) |
@@ -28,15 +29,6 @@ The remaining tables, and all of the figure panels, can be reproduced through th
 | `glove_vectors` | GloVe 2024 Wikipedia+Gigaword 50-d word vectors |
 | `pgs_models_dir`, `variant_annotation`| UKB snpnet weight files and variant annotation |
 
-The individual-level tables come from the Rush Alzheimer's Disease Center Resource Sharing
-Hub and are never redistributed with the code. Only the cohort table is strictly required;
-three tables the development code also read (`filtered_t12_prs.tsv`,
-`continuous_phenotypes.tsv`, `covariates.tsv`) are exact subsets of it and are not used.
-
-**Outputs**: `output_dir/main/Figure*/`, `output_dir/supplementary/FigureS*/`,
-`output_dir/tables/` (incl. the GO-term GloVe phrase vectors behind Fig S10), `output_dir/association/` (the four association runs as
-effects/errors/pvals/fdr matrices) and `output_dir/manifest.tsv` (figure, panel, file,
-generating function, status `generated` or `skipped`, provenance note). No per-individual table is written.
 
 ## Requirements
 
