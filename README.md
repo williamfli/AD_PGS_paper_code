@@ -17,7 +17,8 @@ The remaining figures and tables can be reproduced through the following steps:
 
 **`output_dir`** - Output results directory
 
-**`cohort_table`** — TSV, Expected columns:
+**`cohort_table`** — TSV
+Expected columns:
 - `#projid` (chr): participant id
 - 12 PGS columns named `{GBE_ID}_SCORE1_AVG` (num);
   These 12 should correspond to the prioritized PGS.
@@ -27,7 +28,8 @@ The remaining figures and tables can be reproduced through the following steps:
   ε3/ε3, ε3/ε4, ε4/ε4.
 - Phenotypes (num): the 36 Stage 2 variables, titled by phenotype ids
 
-**`all_pgs_scores`** — TSV, Expected columns:
+**`all_pgs_scores`** — TSV
+Expected columns:
 - `#projid` (chr): participant id
 - 713 PGS columns named `{GBE_ID}_SCORE1_AVG` (num): These are all the PGS tested in Stage 1.
 
