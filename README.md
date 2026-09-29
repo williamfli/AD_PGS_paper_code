@@ -17,8 +17,7 @@ The remaining figures and tables can be reproduced through the following steps:
 
 **`output_dir`** - Output results directory
 
-**`cohort_table`** — TSV
-Expected columns:
+**`cohort_table`** — TSV with expected columns as follows:
 - `#projid` (chr): participant id
 - 12 PGS columns named `{GBE_ID}_SCORE1_AVG` (num);
   These 12 should correspond to the prioritized PGS.
@@ -29,11 +28,10 @@ Expected columns:
 - Phenotypes (num): the 36 Stage 2 variables, titled by phenotype ids
 
 **`all_pgs_scores`** — TSV
-Expected columns:
 - `#projid` (chr): participant id
 - 713 PGS columns named `{GBE_ID}_SCORE1_AVG` (num): These are all the PGS tested in Stage 1.
 
-**`pgs_scores_no_apoe`** — TSV, Expected columns: 
+**`pgs_scores_no_apoe`** — TSV
 - `#projid` (chr): participant ID 
 - 12 PGS columns named `{GBE_ID}_SCORE1_AVG` (num): These should correspond to prioritized PGS that have been rescored without APOE-region variants.
 
@@ -44,11 +42,11 @@ Expected columns:
 
 **`pgs_annotation`** — Table S1 of Tanigawa et al, PLOS Genetics 2022
 
-**`phenotype_annotation`** — TSV, Expected columns:
+**`phenotype_annotation`** — TSV
 - `variable` (chr): phenotype id as in `cohort_table`
 - `name` (chr): phenotype name for display in the figures
 
-**`chromosome_lengths`** — TSV, Expected columns:
+**`chromosome_lengths`** — TSV
 - `Chromosome` (chr): 1–22, X, Y, MT in genome order
 - `Length` (chr): length of each chromosome in bp, thousands commas allowed
 
