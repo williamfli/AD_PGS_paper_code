@@ -3,7 +3,7 @@
 Code for Li et al., *Cross-trait polygenic scores identify genetic correlates of Alzheimer's
 disease heterogeneity*. 
 
-The code reproduces main text figures 2-5, supplementary figures S1-S2, supplementary figures S4-S10, tables S3-S7, and tables S10-S12.
+The code reproduces main text figures 2-5, supplementary figures S1-S2, supplementary figures S4-S14, tables S3-S7, and tables S10-S11.
 
 Non-reproduced results: Figure 1 and Figure S3 are schematics. The information for table S1 is available at https://www.radc.rush.edu/docs/documentation.htm. The information for table S2 can be found among the supplementary tables of Tanigawa et al, Significant sparse polygenic risk scores across 813 traits in UK Biobank, PLOS Genetics 2022. Tables S8 and S9 were developed using the web-based Genomic Regions Enrichment of Annotations Tool (GREAT).
 
@@ -66,4 +66,4 @@ The remaining figures and tables can be reproduced through the following steps:
 ## Requirements
 
 R 4.4 with ggplot2, patchwork, ggrepel, cowplot, ComplexHeatmap, circlize, dendextend,
-cluster, pROC, treemap (or treemapify), glue.
+pROC, treemap (or treemapify), glue.

@@ -38,7 +38,7 @@ BUILD <- list(
     'FigureS9,FigureS10'            = make_figureS9_S10,
     'FigureS11'                     = make_figureS11,
     'FigureS12'                     = make_figureS12,
-    'FigureS13,TableS11,TableS12'   = if (QUICK) function() make_figureS13_and_tables(n_bootstrap = 50)
+    'FigureS13,TableS11'            = if (QUICK) function() make_figureS13_and_tables(n_bootstrap = 50)
                                       else make_figureS13_and_tables,
     'FigureS14'                     = make_figureS14
 )

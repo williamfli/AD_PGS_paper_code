@@ -1,10 +1,10 @@
 # src/fig5_pgs_subtypes.R -- Figure 5 and everything built on the PGS PCA and polygenic subtypes.
 #   make_figure5_pca()             Fig 5a-e: PGS PCA fitted on the seeded 70% training split
 #   make_figureS5()                Fig S5a-b: individual-level PGS and PGS-PC heatmaps
-#   make_figure5_subtypes()        Fig 5f-h: subtype biplot, plaque violins (subtype 4 vs 6), APOE allelotypes
-#   make_figureS11()               Fig S11: subtype means of six standardized phenotypes
-#   make_figureS12()               Fig S12: Fig 5g within ε3/ε3 and within ε2/ε3 individuals
-#   make_figureS13_and_tables()    Fig S13 bootstrap examples, Table S11 stability, Table S12 k-sensitivity
+#   make_figure5_subtypes()        Fig 5f-h: subtype biplot, plaque violins (subtype 1 vs 6), APOE allelotypes
+#   make_figureS11()               Fig S11a: subtype means of six standardized phenotypes; S11b-d: pairwise subtype tests
+#   make_figureS12()               Fig S12: Fig 5g within ε3/ε3 individuals
+#   make_figureS13_and_tables()    Fig S13 bootstrap examples, Table S11 stability
 #   make_figureS14()               Fig S14: Fig 5g on the test split, k-means fit on the training split only
 
 suppressPackageStartupMessages({
@@ -15,7 +15,6 @@ suppressPackageStartupMessages({
     library(circlize)
     library(grid)
     library(dendextend)
-    library(cluster)
 })
 
 # ============================ PART 1: PGS PCA (Fig 5a-e, S5) ==========================
@@ -211,13 +210,16 @@ make_figureS5 <- function() {
           manifest_row('FigureS5', 'b', path_b, note = 'PGS PC1-12 scores of all individuals, both axes clustered'))
 }
 
-# ============== PART 2: subtypes (Fig 5f-h, S11-S13, Tables S11-S12) ==================
+# ============== PART 2: subtypes (Fig 5f-h, S11-S13, Table S11) =======================
 SUBTYPE_PHENOTYPE_IDS <- c('cogn_global_lv', 'gpath', 'plaq_n', 'amyloid', 'plaq_d', 'tangles')
 PLAQUE_IDS <- c(plaq_d = 'Diffuse plaque', plaq_n = 'Neuritic plaque')
-VIOLIN_SUBTYPES <- c(4, 6)
+VIOLIN_SUBTYPES <- c(1, 6)   # the two subtypes compared in Fig 5g, S11 (boxed cells), S12 and S14
+PAIRWISE_PHENOTYPE_IDS <- c('plaq_n', 'plaq_d', 'nft')   # Fig S11b-d
+PAIRWISE_DIFF_CAP <- 0.8   # colour limit (+/-) for differences in subtype mean z-score
+PAIRWISE_BAR_FRACTION <- 0.158   # colour bar inset height as a fraction of the Fig S11b-d page
+S11_PAIRWISE_IN <- c(4.15, 5.7)    # Fig S11b-d page (in)
 LOADING_ARROW_SCALE <- 7
 S13_EXAMPLE_ITERATIONS <- c(1, 27, 77)
-K_RANGE <- 2:10
 UNLABELLED_PGS_PATTERN <- 'physical activity|sun/uv|grey matter'
 
 subtype_colours <- function() setNames(scales::hue_pal()(6)[c(5, 1, 6, 2, 4, 3)], 1:6)
@@ -291,7 +293,8 @@ standardized_phenotypes <- function(ids = SUBTYPE_PHENOTYPE_IDS) {
     out
 }
 
-format_p <- function(p) formatC(signif(p, 2), digits = 2, format = 'fg', flag = '#')
+format_p <- function(p) ifelse(p < 0.001, formatC(p, digits = 1, format = 'e'),
+                               formatC(signif(p, 2), digits = 2, format = 'fg', flag = '#'))
 p_stars <- function(p) ifelse(p < 0.001, '***', ifelse(p < 0.01, '**', ifelse(p < 0.05, '*', '')))
 black_text_theme <- function(size) {
     theme(text = element_text(colour = 'black', size = size), axis.text = element_text(colour = 'black', size = size),
@@ -362,16 +365,17 @@ build_fig5f <- function(with_legend = FALSE, sub = fit_published_subtypes()) {
                  legend.margin = margin(0, 0, 0, 0), legend.spacing.x = unit(2, 'pt'), legend.key.spacing.y = unit(1, 'pt'))
 }
 
-# ---- Figure 5g / S12 / S14: plaque violins, subtype 4 vs 6 -----------------------------------
+# ---- Figure 5g / S12 / S14: plaque violins, VIOLIN_SUBTYPES[1] vs [2] ------------------------
 build_plaque_violin <- function(keep = NULL, title = NULL, font_size = 11, base_theme = NULL,
-                                linewidth = 0.5, outlier_size = 0.8, bracket_linewidth = 0.6, sub = fit_published_subtypes()) {
+                                linewidth = 0.5, outlier_size = 0.8, bracket_linewidth = 0.6, sub = fit_published_subtypes(),
+                                ylim = c(-2.1, 4.5), bracket_y = 4.25) {
     if (is.null(base_theme)) base_theme <- theme_bw(base_size = font_size) + black_text_theme(font_size)
     z <- standardized_phenotypes(names(PLAQUE_IDS))
     if (is.null(keep)) keep <- rep(TRUE, length(sub$subtype))
     in_group <- lapply(VIOLIN_SUBTYPES, function(s) keep & sub$subtype == s)
-    names(in_group) <- VIOLIN_SUBTYPES
+    names(in_group) <- as.character(VIOLIN_SUBTYPES)
     n <- vapply(in_group, sum, integer(1))
-    p <- vapply(names(PLAQUE_IDS), function(v) wilcox.test(z[[v]][in_group[['4']]], z[[v]][in_group[['6']]])$p.value, numeric(1))
+    p <- vapply(names(PLAQUE_IDS), function(v) wilcox.test(z[[v]][in_group[[1]]], z[[v]][in_group[[2]]])$p.value, numeric(1))
 
     long <- do.call(rbind, lapply(names(PLAQUE_IDS), function(v) {
         do.call(rbind, lapply(as.character(VIOLIN_SUBTYPES), function(s) {
@@ -384,7 +388,7 @@ build_plaque_violin <- function(keep = NULL, title = NULL, font_size = 11, base_
     long$x <- factor(paste0('Subtype ', long$subtype, '\n(n=', n[long$subtype], ')'),
                      levels = paste0('Subtype ', VIOLIN_SUBTYPES, '\n(n=', n, ')'))
     annotations <- data.frame(type = factor(unname(PLAQUE_IDS), levels = unname(PLAQUE_IDS)),
-                              x = 1, xend = 2, x_mid = 1.5, y_line = 4.25, label = paste0('p=', format_p(p)), stars = p_stars(p))
+                              x = 1, xend = 2, x_mid = 1.5, y_line = bracket_y, label = paste0('p=', format_p(p)), stars = p_stars(p))
 
     plot <- ggplot(long, aes(x = x, y = value, fill = subtype)) +
         geom_violin(trim = FALSE, alpha = 0.7, width = 0.9, linewidth = linewidth) +
@@ -398,7 +402,7 @@ build_plaque_violin <- function(keep = NULL, title = NULL, font_size = 11, base_
         facet_wrap(~type, nrow = 1, strip.position = 'bottom') +
         scale_fill_manual(values = sub$colours[as.character(VIOLIN_SUBTYPES)], guide = 'none') +
         scale_y_continuous(breaks = seq(-2, 4, 2)) +
-        coord_cartesian(ylim = c(-2.1, 4.5), clip = 'off') +
+        coord_cartesian(ylim = ylim, clip = 'off') +
         labs(x = NULL, y = 'Standardized multiregion plaque burden (z-score)', title = title) +
         base_theme +
         theme(strip.placement = 'outside', strip.background = element_blank(),
@@ -442,7 +446,7 @@ make_figure5_subtypes <- function() {
     violin <- build_plaque_violin(font_size = HOUSE_FONT_PT, base_theme = theme_house(), linewidth = HOUSE_LINE_MM,
                                   outlier_size = 0.3, bracket_linewidth = HOUSE_LINE_MM)
     violin$plot <- violin$plot + labs(y = 'Standardized multiregion\nplaque burden (z-score)')
-    g_path <- fig_path('Figure5', 'Fig5g_plaque_violin_subtype4_vs_6.pdf')
+    g_path <- fig_path('Figure5', glue('Fig5g_plaque_violin_subtype{VIOLIN_SUBTYPES[1]}_vs_{VIOLIN_SUBTYPES[2]}.pdf'))
     open_panel_pdf(g_path, 'g'); print(violin$plot); dev.off()
     say('Fig 5g Wilcoxon p: diffuse {format_p(violin$p["plaq_d"])}, neuritic {format_p(violin$p["plaq_n"])}')
 
@@ -452,7 +456,7 @@ make_figure5_subtypes <- function() {
     rbind(
         manifest_row('Figure5', 'f', f_path, note = glue('k-means k={N_SUBTYPES} on variance-weighted PGS PCs, seed {SPLIT_SEED}')),
         manifest_row('Figure5', 'f (legend)', legend_path, note = glue('standalone legend, {round(legend_w, 2)} x {round(legend_h, 2)} in')),
-        manifest_row('Figure5', 'g', g_path, note = glue('Wilcoxon p diffuse={format_p(violin$p["plaq_d"])}, neuritic={format_p(violin$p["plaq_n"])}; n={violin$n["4"]}/{violin$n["6"]}')),
+        manifest_row('Figure5', 'g', g_path, note = glue('Wilcoxon p diffuse={format_p(violin$p["plaq_d"])}, neuritic={format_p(violin$p["plaq_n"])}; n={paste(violin$n, collapse = "/")}')),
         manifest_row('Figure5', 'h', h_path))
 }
 
@@ -485,27 +489,102 @@ make_figureS11 <- function() {
     open_pdf(path, width = 6.5, height = 8)
     draw(ht, heatmap_legend_side = 'right')
     dev.off()
-    manifest_row('FigureS11', 'heatmap', path, note = 'means of whole-cohort z-scores per subtype')
+    rbind(manifest_row('FigureS11', 'a', path, note = 'means of whole-cohort z-scores per subtype'),
+          make_figureS11_pairwise())
 }
 
-# ---- Figure S12: Fig 5g within one APOE genotype ---------------------------------------------
-make_figureS12 <- function() {
-    say('Figure S12: plaque violins within ε3/ε3 and ε2/ε3 individuals')
-    cohort <- load_cohort()
-    strata <- list(a = list(code = 0,  label = 'ε3/ε3 individuals', file = 'FigS12a_plaque_violin_e3e3.pdf'),
-                   b = list(code = -1, label = 'ε2/ε3 individuals', file = 'FigS12b_plaque_violin_e2e3.pdf'))
-    do.call(rbind, lapply(names(strata), function(panel) {
-        s <- strata[[panel]]
-        violin <- build_plaque_violin(keep = cohort$apoe_genotype == s$code, title = s$label)
-        path <- fig_path('FigureS12', s$file)
-        ggsave(path, violin$plot, width = 5, height = 4.5, device = open_pdf)
-        say('Fig S12{panel} ({s$label}) Wilcoxon p: diffuse {format_p(violin$p["plaq_d"])}, neuritic {format_p(violin$p["plaq_n"])}')
-        manifest_row('FigureS12', panel, path, note = glue('apoe_genotype == {s$code}; Wilcoxon p diffuse={format_p(violin$p["plaq_d"])}, ',
-                                                          'neuritic={format_p(violin$p["plaq_n"])}; n={violin$n["4"]}/{violin$n["6"]}'))
+# ---- Figure S11b-d: all-by-all subtype Wilcoxon tests, FDR over all phenotypes x pairs -------
+# Wilcoxon over every subtype pair for each phenotype; FDR across all phenotypes x pairs.
+pairwise_subtype_tests <- function(ids = PAIRWISE_PHENOTYPE_IDS, sub = fit_published_subtypes()) {
+    z <- standardized_phenotypes(ids)
+    pairs <- t(combn(1:6, 2))
+    tests <- do.call(rbind, lapply(ids, function(v) {
+        stats <- t(apply(pairs, 1, function(ab) {
+            x <- z[[v]][sub$subtype == ab[1]]; y <- z[[v]][sub$subtype == ab[2]]
+            c(mean_diff = mean(x, na.rm = TRUE) - mean(y, na.rm = TRUE), p = wilcox.test(x, y)$p.value)
+        }))
+        data.frame(phenotype = v, a = pairs[, 1], b = pairs[, 2], stats)
     }))
+    tests$fdr <- p.adjust(tests$p, method = 'fdr')
+    tests
 }
 
-# ---- Bootstrap resamples (Fig S13, Table S11) and k-sensitivity (Table S12) ------------------
+# Half-heatmaps laid on their side: pair (a, b) is a diamond centred at x = (a + b) / 2, height (b - a) / 2,
+# coloured by mean z_a - mean z_b, asterisks for FDR. The colour bar is cut at the most negative difference (to 0.1).
+pairwise_triangles_plot <- function(tests) {
+    ids <- factor(tests$phenotype, levels = PAIRWISE_PHENOTYPE_IDS)
+    legend_min <- min(0, floor(min(tests$mean_diff) * 10) / 10)
+    ramp <- colorRamp2(c(-PAIRWISE_DIFF_CAP, 0, PAIRWISE_DIFF_CAP), c('violet', 'white', '#DC0000FF'))
+    x <- (tests$a + tests$b) / 2; y <- (tests$b - tests$a) / 2
+    diamonds <- data.frame(phenotype = rep(ids, each = 4), id = rep(seq_len(nrow(tests)), each = 4),
+                           mean_diff = rep(tests$mean_diff, each = 4),
+                           px = c(rbind(x - 0.5, x, x + 0.5, x)), py = c(rbind(y, y + 0.5, y, y - 0.5)))
+    stars <- data.frame(phenotype = ids, x = x, y = y - 0.1, label = p_stars(tests$fdr))
+    zigzag <- rev(seq(1, 6, by = 0.5))[-1]
+    outline <- data.frame(px = c(1, 3.5, 6, zigzag), py = c(0.5, 3, 0.5, ifelse(zigzag %% 1 == 0, 0.5, 0)))
+    ticks <- expand.grid(x = 1:6, phenotype = factor(PAIRWISE_PHENOTYPE_IDS, levels = PAIRWISE_PHENOTYPE_IDS))
+
+    fill_scale <- function(...) scale_fill_gradientn(colours = ramp(seq(legend_min, PAIRWISE_DIFF_CAP, length.out = 60)),
+                                                     limits = c(legend_min, PAIRWISE_DIFF_CAP), guide = 'none', ...)
+    triangles <- ggplot() +
+        geom_polygon(data = diamonds, aes(px, py, group = id, fill = mean_diff), colour = NA) +
+        geom_polygon(data = outline, aes(px, py), fill = NA, colour = 'grey75', linewidth = HOUSE_LINE_MM / 2) +
+        geom_text(data = stars, aes(x, y, label = label), size = FIG5_TEXT_SIZE, family = HOUSE_FONT_FAMILY) +
+        geom_text(data = ticks, aes(x, -0.12, label = x), size = FIG5_TEXT_SIZE, family = HOUSE_FONT_FAMILY, vjust = 1) +
+        fill_scale() +
+        facet_wrap(~phenotype, ncol = 1, labeller = as_labeller(setNames(mapper_pheno(PAIRWISE_PHENOTYPE_IDS), PAIRWISE_PHENOTYPE_IDS))) +
+        coord_fixed(clip = 'off') + scale_y_continuous(limits = c(-0.45, 3)) +
+        labs(x = 'AD polygenic subtype', y = NULL,
+             caption = glue('FDR: * < 0.05, ** < 0.01, *** < 0.001 (Wilcoxon, FDR over {nrow(tests)} tests)')) +
+        theme_void(base_size = HOUSE_FONT_PT, base_family = HOUSE_FONT_FAMILY) +
+        theme(text = element_text(size = HOUSE_FONT_PT, colour = HOUSE_TEXT_COLOUR),
+              strip.text = element_text(size = HOUSE_FONT_PT, margin = margin(b = 3)),
+              axis.title.x = element_text(size = HOUSE_FONT_PT, margin = margin(t = 3)),
+              plot.caption = element_text(size = HOUSE_FONT_PT, hjust = 0), plot.margin = margin(6, 111, 6, 6), panel.spacing = unit(9, 'pt'))
+
+    # Colour bar drawn by hand (S11a-sized): ends labelled on the right, 0 on the left. Bar spans x 0..0.5.
+    step <- (PAIRWISE_DIFF_CAP - legend_min) / 100
+    bar <- data.frame(y = seq(legend_min + step / 2, PAIRWISE_DIFF_CAP - step / 2, by = step))
+    right_ticks <- data.frame(y = c(legend_min, PAIRWISE_DIFF_CAP))
+    colour_bar <- ggplot() +
+        geom_tile(data = bar, aes(0.25, y, fill = y), width = 0.5, height = step) + fill_scale() +
+        geom_segment(data = right_ticks, aes(x = 0.5, xend = 0.62, y = y, yend = y), linewidth = HOUSE_LINE_MM) +
+        geom_text(data = right_ticks, aes(0.7, y, label = y), hjust = 0, size = FIG5_TEXT_SIZE, family = HOUSE_FONT_FAMILY) +
+        annotate('segment', x = -0.12, xend = 0, y = 0, yend = 0, linewidth = HOUSE_LINE_MM) +
+        annotate('text', x = -0.2, y = 0, label = '0', hjust = 1, size = FIG5_TEXT_SIZE, family = HOUSE_FONT_FAMILY) +
+        scale_x_continuous(limits = c(-0.6, 5), expand = c(0, 0)) + scale_y_continuous(expand = c(0, 0)) +
+        coord_cartesian(clip = 'off') +
+        labs(title = 'Difference in subtype average of\nstandardized phenotype\n(left - right subtype, z-score)') +
+        theme_void(base_size = HOUSE_FONT_PT, base_family = HOUSE_FONT_FAMILY) +
+        theme(plot.title = element_text(size = HOUSE_FONT_PT, colour = HOUSE_TEXT_COLOUR, hjust = 0, margin = margin(b = 4)),
+              plot.title.position = 'plot')
+    triangles + inset_element(colour_bar, left = 0.64, right = 1, bottom = 0.42, top = 0.42 + PAIRWISE_BAR_FRACTION,
+                              align_to = 'full', clip = FALSE)
+}
+
+make_figureS11_pairwise <- function() {
+    say('Figure S11b-d: all-by-all subtype comparisons ({paste(PAIRWISE_PHENOTYPE_IDS, collapse = ", ")})')
+    tests <- pairwise_subtype_tests()
+    path <- fig_path('FigureS11', 'FigS11bcd_pairwise_subtypes.pdf')
+    ggsave(path, pairwise_triangles_plot(tests), width = S11_PAIRWISE_IN[1], height = S11_PAIRWISE_IN[2], device = open_pdf)
+    n_sig <- vapply(PAIRWISE_PHENOTYPE_IDS, function(v) sum(tests$phenotype == v & tests$fdr < 0.05), integer(1))
+    say('Fig S11b-d: pairs with FDR < 0.05 (of 15): {paste(names(n_sig), n_sig, sep = " ", collapse = ", ")}')
+    manifest_row('FigureS11', 'b-d', path, note = glue('pairwise Wilcoxon, FDR over {nrow(tests)} tests; pairs FDR < 0.05 of 15: ',
+                                                      '{paste(names(n_sig), n_sig, sep = "=", collapse = ", ")}'))
+}
+
+# ---- Figure S12: Fig 5g within ε3/ε3 individuals --------------------------------------------
+make_figureS12 <- function() {
+    say('Figure S12: plaque violins within ε3/ε3 individuals')
+    violin <- build_plaque_violin(keep = load_cohort()$apoe_genotype == 0, title = 'ε3/ε3 individuals')
+    path <- fig_path('FigureS12', 'FigS12_plaque_violin_e3e3.pdf')
+    ggsave(path, violin$plot, width = 5, height = 4.5, device = open_pdf)
+    say('Fig S12 Wilcoxon p: diffuse {format_p(violin$p["plaq_d"])}, neuritic {format_p(violin$p["plaq_n"])}; n={paste(violin$n, collapse = "/")}')
+    manifest_row('FigureS12', 'violin', path, note = glue('apoe_genotype == 0; Wilcoxon p diffuse={format_p(violin$p["plaq_d"])}, ',
+                                                         'neuritic={format_p(violin$p["plaq_n"])}; n={paste(violin$n, collapse = "/")}'))
+}
+
+# ---- Bootstrap resamples (Fig S13, Table S11) -----------------------------------------------
 # Refit on a bootstrap resample, relabel everyone by nearest centroid, match to the published numbering.
 resample_subtypes <- function(iteration) {
     pgs_matrix <- subtype_pgs_matrix()
@@ -541,25 +620,10 @@ bootstrap_stability_table <- function(n_bootstrap = N_BOOTSTRAP, reference = fit
                `Jaccard Stability Bootstrap Standard Deviation` = apply(jaccard_matrix, 2, sd), check.names = FALSE)
 }
 
-# Table S12: total within-cluster SS and mean silhouette width for k = 2..10.
-k_sensitivity_table <- function(k_range = K_RANGE) {
-    pgs_matrix <- subtype_pgs_matrix()
-    do.call(rbind, lapply(k_range, function(k) {
-        fit <- fit_subtype_pipeline(pgs_matrix, k = k, seed = SPLIT_SEED)
-        sil <- silhouette(fit$kmeans$cluster, dist(fit$weighted_pcs))
-        data.frame(`Number of Clusters` = k, `Total Within-Cluster Sum of Squares` = fit$kmeans$tot.withinss,
-                   `Mean Silhouette Width` = mean(sil[, 'sil_width']), check.names = FALSE)
-    }))
-}
-
 make_figureS13_and_tables <- function(n_bootstrap = N_BOOTSTRAP) {
     say('Figure S13: bootstrap resample examples')
     s13_path <- fig_path('FigureS13', 'FigS13_bootstrap_resample_examples.pdf')
     ggsave(s13_path, build_figS13(), width = 7.2, height = 7.6, device = open_pdf)
-
-    say('Table S12: k-sensitivity (k = {min(K_RANGE)}..{max(K_RANGE)})')
-    s12_path <- table_path('TableS12_k_sensitivity.tsv')
-    write.table(k_sensitivity_table(), s12_path, sep = '\t', quote = FALSE, row.names = FALSE)
 
     say('Table S11: bootstrap stability, {n_bootstrap} resamples')
     s11_path <- table_path('TableS11_bootstrap_stability_k6.tsv')
@@ -568,8 +632,7 @@ make_figureS13_and_tables <- function(n_bootstrap = N_BOOTSTRAP) {
     rbind(
         manifest_row('FigureS13', 'a-d', s13_path, note = glue('primary fit + bootstrap iterations {paste(S13_EXAMPLE_ITERATIONS, collapse = ", ")}')),
         manifest_row('TableS11', 'bootstrap stability', s11_path,
-                     note = if (n_bootstrap == N_BOOTSTRAP) glue('{n_bootstrap} resamples') else glue('QUICK run: {n_bootstrap} resamples (the paper used {N_BOOTSTRAP})')),
-        manifest_row('TableS12', 'k sensitivity', s12_path, note = glue('k = {min(K_RANGE)}..{max(K_RANGE)}, seed {SPLIT_SEED}')))
+                     note = if (n_bootstrap == N_BOOTSTRAP) glue('{n_bootstrap} resamples') else glue('QUICK run: {n_bootstrap} resamples (the paper used {N_BOOTSTRAP})')))
 }
 
 # ============================ PART 3: Figure S14 ======================================
@@ -605,10 +668,11 @@ make_figureS14 <- function() {
     say('Figure S14: Fig 5g on the held-out test split, subtypes fit on the training split')
     sub <- fit_subtypes_holdout()
     label <- glue('Held-out test split (30%, n={length(sub$test_idx)})')
-    violin <- build_plaque_violin(keep = seq_along(sub$subtype) %in% sub$test_idx, title = label, sub = sub)
+    violin <- build_plaque_violin(keep = seq_along(sub$subtype) %in% sub$test_idx, title = label, sub = sub,
+                                  ylim = c(-2.8, 6), bracket_y = 5.6)
     path <- fig_path('FigureS14', 'FigS14_plaque_violin_test_split.pdf')
-    ggsave(path, violin$plot, width = 5, height = 4.5, device = open_pdf)
-    say('Fig S14 Wilcoxon p: diffuse {format_p(violin$p["plaq_d"])}, neuritic {format_p(violin$p["plaq_n"])}; n={violin$n["4"]}/{violin$n["6"]}')
+    ggsave(path, violin$plot, width = 6, height = 5.5, device = open_pdf)
+    say('Fig S14 Wilcoxon p: diffuse {format_p(violin$p["plaq_d"])}, neuritic {format_p(violin$p["plaq_n"])}; n={paste(violin$n, collapse = "/")}')
     manifest_row('FigureS14', 'violin', path, note = glue('{label}; k-means on training rows only; Wilcoxon p diffuse={format_p(violin$p["plaq_d"])}, ',
-                                                         'neuritic={format_p(violin$p["plaq_n"])}; n={violin$n["4"]}/{violin$n["6"]}'))
+                                                         'neuritic={format_p(violin$p["plaq_n"])}; n={paste(violin$n, collapse = "/")}'))
 }
